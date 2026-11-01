@@ -4,6 +4,10 @@ Installer 0.11.2 checks the application's lifetime mutex at startup and again be
 
 Build with PowerShell 7 and the system .NET Framework C# compiler. `scripts/build-windows-installer.ps1` accepts explicit download, work, output and Inno Setup compiler directories. Use `-StageOnly` to validate the isolated runtime before compiling the installer.
 
+The `Windows Release` GitHub Actions workflow prepares a clean Python 3.12.10 environment, downloads pinned CPU PyTorch wheels and the PS4 checkpoint, validates public build inputs, runs regression tests and builds on Windows Server 2022. Inno Setup 7.1.1 is installed through Chocolatey on the hosted runner. Microsoft redistributables are checked for valid signatures before packaging. SpeakerBeam weights and personal data remain excluded.
+
+Push a tag matching `AppVersion` in `AECStudio.iss` (for example `v0.11.2`) to build and publish the installer, checksum and dependency list. The workflow also supports manual builds without publishing; enable the publish input to create a Release. Existing Releases are never overwritten. Build artifacts are retained for 14 days. Version or test failures prevent publication.
+
 Pinned inputs:
 
 - Official Python 3.12.10 x64 embeddable ZIP.

@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 data/
 build/
+dist/
 models/ps4/*.pt
 models/ps4/.cache/
 models/speakerbeam/*.ckpt

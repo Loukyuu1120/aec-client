@@ -143,5 +143,8 @@ Write-Output "Staged runtime: $stage"
 if (-not $StageOnly) {
     & $InnoCompiler "/DStageRoot=$stage" "/DOutputRoot=$OutputRoot" (Join-Path $projectRoot 'packaging\windows\AECStudio.iss')
     if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
-    Get-FileHash (Join-Path $OutputRoot 'AECStudio-Setup-0.11.2-x64.exe') -Algorithm SHA256 | Format-List
+    $installerSource = Get-Content (Join-Path $projectRoot 'packaging\windows\AECStudio.iss') -Raw
+    $versionMatch = [regex]::Match($installerSource, '(?m)^AppVersion=(\d+\.\d+\.\d+)\r?$')
+    if (-not $versionMatch.Success) { throw 'Missing installer AppVersion.' }
+    Get-FileHash (Join-Path $OutputRoot ("AECStudio-Setup-" + $versionMatch.Groups[1].Value + '-x64.exe')) -Algorithm SHA256 | Format-List
 }

@@ -4,6 +4,34 @@ Windows 中文语音工作台：回声消除、降噪和个人声纹人声过滤
 
 [下载最新安装包](https://github.com/Loukyuu1120/aec-client/releases/latest) · [查看发布记录](https://github.com/Loukyuu1120/aec-client/releases) · [反馈问题](https://github.com/Loukyuu1120/aec-client/issues)
 
+## 界面预览
+
+### 语音工作台
+
+选择麦克风和虚拟输出，在“清晰通话”与“只保留我的声音”之间切换，查看原声及处理后的实时电平。
+
+![AEC Studio 语音工作台：音频路由、处理模式与按需处理入口](screenshots/studio-workspace.png)
+
+<details>
+<summary>查看声纹注册与过滤测试</summary>
+
+注册个人声纹，在测试前调整过滤参数，再按三阶段提示对照试听。
+
+![我的声纹：注册引导、过滤参数与三阶段测试](screenshots/studio-voice.png)
+
+</details>
+
+<details>
+<summary>查看处理设置、GPU 加速与后台开关</summary>
+
+配置提取模型、回声消除、降噪、GPU 组件、按需麦克风及声纹学习。
+
+![处理设置：模型与 GPU、启动与后台、按需麦克风和声纹学习开关](screenshots/studio-settings.png)
+
+</details>
+
+截图使用空白测试资料，设备名称已匿名；展示待机界面，不代表实际过滤测试结果。截图中的应用运行时版本为 0.11.0，与安装程序版本分别维护。
+
 ## 功能
 
 - **清晰通话**：48 kHz 回声消除与降噪。

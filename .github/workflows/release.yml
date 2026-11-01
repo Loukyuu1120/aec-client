@@ -77,10 +77,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'PS4 model download failed' }
       - name: Locate Inno Setup
         run: |
-          $compiler = Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup */ISCC.exe","$env:ProgramFiles/Inno Setup */ISCC.exe" -ErrorAction SilentlyContinue | Sort-Object { [version]$_.VersionInfo.FileVersion } -Descending | Select-Object -First 1
+          $compiler = Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup */ISCC.exe","$env:ProgramFiles/Inno Setup */ISCC.exe" -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
           if (-not $compiler) { throw 'Inno Setup compiler missing' }
-          if ([version]$compiler.VersionInfo.FileVersion -lt [version]'6.5.0') { throw 'Inno Setup 6.5 or newer is required' }
-          Write-Output "Using $($compiler.FullName), version $($compiler.VersionInfo.FileVersion)"
+          Write-Output "Using $($compiler.FullName)"
           "INNO_COMPILER=$($compiler.FullName)" >> $env:GITHUB_ENV
       - name: Build installer
         run: |

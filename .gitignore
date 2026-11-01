@@ -1,0 +1,11 @@
+.venv/
+.venv-*/
+quiet-voice-validation.json
+__pycache__/
+*.pyc
+data/
+build/
+models/ps4/*.pt
+models/ps4/.cache/
+models/speakerbeam/*.ckpt
+test-results/

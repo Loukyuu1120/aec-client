@@ -29,7 +29,7 @@ app = FastAPI(title="aec-web")
 chain = Chain(model_dir=os.path.join(ROOT, "models"))
 board = SoundBoard()
 runner = None
-runner_lock = threading.Lock()
+runner_lock = threading.RLock()
 prefs = {"mic": None, "ref": None, "out": None,
          "nsEnabled": True, "nsBackend": "dtln", "micGain": 1.0,
          "trayEnabled": True, "listenToSelf": False,
@@ -61,7 +61,7 @@ def monitor_output_index():
 
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(UI_DIR, "imgui_web.html"))
+    return FileResponse(os.path.join(UI_DIR, "studio.html"))
 
 
 @app.get("/imgui_web.js")
@@ -113,6 +113,8 @@ def state():
     st["profile"] = prefs.get("profile", 0)
     st["experimentalEngines"] = bool(prefs.get("experimentalEngines"))
     st["soundboardPlaying"] = board.playing
+    demand = getattr(app.state, 'microphone_demand', None)
+    st['onDemandArmed'] = bool(demand and demand.armed)
     # Snapshot: /api/stop nulls `runner` from a worker thread;
     # a check-then-use race here raised and 500'd (the WS loop
     # already snapshots for the same reason).
@@ -140,7 +142,7 @@ def set_prefs(body: dict):
         # value) keeps the previous backend — the UI resyncs from
         # state on the next tick, so the revert is visible.
         nb = str(body["nsBackend"])
-        if nb in ("off", "dtln", "hush") and chain.set_ns_backend(nb):
+        if nb in ("off", "dtln", "hush", "webrtc") and chain.set_ns_backend(nb):
             prefs["nsBackend"] = nb
             prefs["nsEnabled"] = nb != "off"
     elif "nsEnabled" in body:
@@ -274,6 +276,11 @@ def soundboard_cmd(body: dict):
 
 @app.post("/api/start")
 def start():
+    demand = getattr(app.state, 'microphone_demand', None)
+    return demand.start() if demand is not None else start_audio()
+
+
+def start_audio():
     global runner
     with runner_lock:
         if chain.running:
@@ -285,13 +292,17 @@ def start():
         if chain.engine != name and not chain.set_engine(name):
             return {"ok": False, "error": chain.last_error or
                     "engine backend unavailable"}
+        selected_ns = prefs.get('nsBackend', 'webrtc')
+        if not chain.set_ns_backend(selected_ns):
+            return {'ok': False, 'error': chain.last_error}
         if not chain.start():
+            chain.stop()
             return {"ok": False, "error": chain.last_error or
                     "Failed to load DTLN model"}
         # Migrate the legacy bool onto the radio (a stored "hush"
         # wins; a stored bool only applies when no radio was saved).
         nb = prefs.get("nsBackend")
-        if nb in ("off", "dtln", "hush"):
+        if nb in ("off", "dtln", "hush", "webrtc"):
             chain.set_ns_backend(nb)
             prefs["nsBackend"] = chain.ns_backend
             prefs["nsEnabled"] = chain.ns_backend != "off"
@@ -348,6 +359,8 @@ def start():
                                  monitor_enabled=prefs.get("monitorEnabled", True))
             runner.start()
         except Exception as e:
+            if runner is not None:
+                runner.stop()
             chain.stop()
             runner = None
             return {"ok": False, "error": f"audio failed to start: {e}"}
@@ -356,6 +369,11 @@ def start():
 
 @app.post("/api/stop")
 def stop():
+    demand = getattr(app.state, 'microphone_demand', None)
+    return demand.stop() if demand is not None else stop_audio()
+
+
+def stop_audio():
     global runner
     with runner_lock:
         if runner is not None:
@@ -424,9 +442,13 @@ def main():
         print(f"Soundboard: scan failed ({e})", flush=True)
     # Single worker, always: extra workers would duplicate the
     # preloaded models in RAM and fight over the one audio pump.
-    uvicorn.run(app, host="127.0.0.1", port=8000,
+    uvicorn.run(app, host="127.0.0.1", port=8767,
                 workers=1, log_level="warning")
 
+
+from .studio_routes import install as _install_studio
+import sys as _sys
+_install_studio(_sys.modules[__name__])
 
 if __name__ == "__main__":
     main()

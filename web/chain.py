@@ -54,7 +54,7 @@ EXPERIMENTAL_ENGINES = ("nkf",)
 # NS-stage backends: "off" skips the stage, "dtln" is the shipped
 # DTLN-NS pair, "hush" is the user-supplied Hush library (fail-closed
 # at selection while its files are absent — see web/hush.py).
-NS_BACKENDS = ("off", "dtln", "hush")
+NS_BACKENDS = ("off", "dtln", "hush", "webrtc")
 
 
 # Backend probe cache: state() calls engine_available() for every
@@ -159,6 +159,12 @@ class Chain:
         self._backend = None  # Aec3Engine / NkfEngine (dtln uses self.dtln)
         self._load_lock = threading.Lock()
         self._swap_lock = threading.Lock()
+        self.target_stream = None
+        self.target_factory = None  # fork: validated before any audio devices open
+        self.stage_levels = {}
+        self.sample_rate = 16000
+        self.wideband = None
+        self.webrtc_ns = None
         # High-pass coefficients (RBJ, 16 kHz — the web chain rate is
         # fixed, so these never change) + Direct Form I state, reset
         # every Start so sessions never inherit filter memory.
@@ -379,6 +385,27 @@ class Chain:
         return True
 
     def start(self):
+        if self.target_factory is not None:
+            try:
+                self.target_stream = self.target_factory()
+            except Exception as e:
+                self.last_error = str(e)
+                return False
+        if self.sample_rate == 48000:
+            try:
+                from .wideband import WidebandProcessor
+                if self.target_stream is not None:
+                    raise ValueError('target_requires_16k')
+                if self.ns_backend not in ('off', 'webrtc'):
+                    raise ValueError('wideband_requires_webrtc_ns')
+                self.wideband = WidebandProcessor(self.engine, self.ns_backend != 'off')
+                self.frames, self.running, self.last_error = 0, True, ''
+                self.stage_levels = {}
+                return True
+            except Exception as e:
+                self.last_error = str(e)
+                return False
+        self.webrtc_ns = None
         with self._load_lock:
             with self._swap_lock:
                 engine, backend = self.engine, self._backend
@@ -430,6 +457,11 @@ class Chain:
             return True
 
     def stop(self):
+        self.wideband = None
+        self.webrtc_ns = None
+        if self.target_stream is not None:
+            self.target_stream.close()
+            self.target_stream = None
         # Models stay resident (preloaded at server
         # startup); a new session just resets the
         # DSP state, so Stop -> Start is instant too.
@@ -446,10 +478,24 @@ class Chain:
             self.running = False
             self.frames = 0
 
+    def _stage_level(self, name, audio):
+        power = float(np.mean(np.asarray(audio, dtype=np.float64) ** 2))
+        previous = self.stage_levels.get(name, 0.) ** 2
+        self.stage_levels[name] = math.sqrt(.98 * previous + .02 * power)
+
     def process_frame(self, mic_i16, ref_i16):
         """One int16 frame in -> int16 frame out. Never mutes."""
         mic = np.asarray(mic_i16, dtype=np.int16)
         ref = np.asarray(ref_i16, dtype=np.int16)
+        if self.wideband is not None and self.running:
+            try:
+                cleaned = self.wideband.process(mic, ref, self.mic_gain)
+                self.frames += 1
+                self._stage_level('output', cleaned.astype(np.float32) / 32768.)
+                return cleaned
+            except Exception as e:
+                self.last_error = str(e)
+                return np.zeros_like(mic)
         if not self.running or self.dtln is None:
             return mic.copy()
         if self.mic_gain != 1.0:
@@ -469,11 +515,23 @@ class Chain:
                 cleaned = self.dtln.process(mic, ref)
             else:
                 cleaned = backend.process(mic, ref)
+            self._stage_level('aec', cleaned.astype(np.float32) / 32768.0)
+            # fork: reference-conditioned TSE consumes AEC output BEFORE NS.
+            if self.target_stream is not None:
+                f = self.target_stream.process(cleaned.astype(np.float32) / 32768.0)
+                cleaned = dsp.f32_to_i16_round(f)
+                self._stage_level('target', f)
             if ns_backend != "off":
                 f = cleaned.astype(np.float32) / 32768.0
                 staged = False
                 try:
-                    if ns_backend == "hush" and self.hush is not None:
+                    if ns_backend == 'webrtc':
+                        if self.webrtc_ns is None:
+                            from .wideband import NarrowbandNs
+                            self.webrtc_ns = NarrowbandNs()
+                        f = self.webrtc_ns.process(f)
+                        staged = True
+                    elif ns_backend == "hush" and self.hush is not None:
                         f = self.hush.process(f)
                         staged = True
                     elif (ns_backend == "dtln" and self.ns is not None
@@ -484,20 +542,29 @@ class Chain:
                     pass  # fail-open: keep engine output
                 if staged:
                     cleaned = dsp.f32_to_i16_round(f)
+            self._stage_level('denoise', cleaned.astype(np.float32) / 32768.0)
             # Voice-path high-pass (80 Hz) on every path including
             # engine-Off and NS-off, mirroring the desktop (post-NS,
             # pre-meter/limiter): hum/rumble/DC the stages leave behind.
             fh = self._hpf_run(cleaned.astype(np.float32) / 32768.0)
             # Expander just after the high-pass (desktop parity):
             # digital-black floor without onset chopping.
-            fh = self._exp_run(fh)
+            # Target extraction already suppresses competing audio. The upstream
+            # fixed gate closes below -50 dBFS and chops quiet extracted speech.
+            # Never use that gate for target mode; do not bypass TSE with raw mic.
+            if self.target_stream is None:
+                fh = self._exp_run(fh)
             # Presence shelf just after the expander (desktop parity):
             # in-band clarity lift, meters read the shipped signal.
             fh = self._pres_run(fh)
             cleaned = dsp.f32_to_i16_round(fh)
+            self._stage_level('output', fh)
             self.frames += 1
             return cleaned
         except Exception as e:  # fail-open: ship mic, never silence
+            if self.target_stream is not None:
+                self.last_error = f'tse_processing_failed: {e}'
+                return np.zeros_like(mic)
             self.last_error = f"chain error (fail-open): {e}"
             return mic.copy()
 
@@ -517,6 +584,8 @@ class Chain:
                 "outRms": 0.0, "dropped": 0,
                 "error": self.hush_error,
             })
+        elif ns_backend == 'webrtc':
+            ns = {'backend': 1, 'rCount': 0, 'inRms': 0., 'outRms': 0., 'dropped': 0, 'error': ''}
         elif ns_backend == "off":
             # Stage skipped: report it off (backend 0), not the
             # DTLN object's readiness — consumers read backend as
@@ -538,16 +607,19 @@ class Chain:
                 nkf_st = backend.get_state()
             except Exception:
                 nkf_st = None
-        ns_tag = (" + Hush" if (ns_backend == "hush" and ns_active)
+        ns_tag = (" + WebRTC NS" if ns_backend == "webrtc" else " + Hush" if (ns_backend == "hush" and ns_active)
                   else (" + DTLN-NS" if (ns_backend == "dtln" and ns_active)
                         else ""))
         return {
+            "stageLevels": dict(self.stage_levels),
+            "target": self.target_stream.state() if self.target_stream else {"enabled": False},
             "running": self.running,
             "engine": name,
             "chain": (name + ns_tag) if self.running else "",
             "nsEnabled": 1 if ns_backend != "off" else 0,
             "nsBackend": ns_backend,
             "nsBackends": {
+                "webrtc": engine_available("aec3"),
                 # DTLN pair ships in models/ (None = not loaded yet,
                 # assume present until the load says otherwise).
                 "dtln": (dtln_obj.backend != 0)
@@ -558,7 +630,7 @@ class Chain:
                 # Experimental harness backend; model ships in models/.
             },
             "micGain": self.mic_gain,
-            "sampleRate": 16000,
+            "sampleRate": self.sample_rate,
             "dtlnBackend": dtln_obj.backend if dtln_obj else 0,
             "ns": ns,
             "engines": {n: engine_available(n) for _, n in PROFILES},

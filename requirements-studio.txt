@@ -1,0 +1,7 @@
+-r web/requirements-base.txt
+-r web/requirements-window.txt
+-r web/requirements-engines.txt
+scipy>=1.13
+huggingface-hub>=0.26
+httpx>=0.28
+pyaudiowpatch==0.2.12.8

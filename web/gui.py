@@ -33,15 +33,118 @@ import threading
 import time
 import urllib.request
 import webbrowser
+import argparse
+import subprocess
+from pathlib import Path
 
-PORT = 8000
+PORT = int(os.environ.get('AEC_STUDIO_PORT', '8767'))
 URL = f"http://127.0.0.1:{PORT}/"
-TITLE = "AEC Web — AEC Client"
+TITLE = "AEC Studio · 声纹语音工作台"
 
 _server = None  # uvicorn.Server, when this process owns one
 _window = None  # pywebview window, once opened
 _tray = None    # pystray.Icon, once the tray is on
 _quitting = False
+_force_tray = False
+_owns_server = False
+_open_window_event = threading.Event()
+_quit_event = threading.Event()
+_tray_lock = threading.Lock()
+
+
+def _startup_options():
+    try:
+        with urllib.request.urlopen(f'{URL}api/app/startup', timeout=3) as response:
+            return json.loads(response.read())['settings']
+    except Exception:
+        return {}
+
+
+def _post(path, body=None):
+    request = urllib.request.Request(URL.rstrip('/')+path,
+        data=json.dumps(body or {}).encode('utf-8'),
+        headers={'Content-Type':'application/json'}, method='POST')
+    with urllib.request.urlopen(request, timeout=45) as response:
+        return json.loads(response.read())
+
+
+def _auto_start_processing():
+    for attempt in range(20):
+        if _quit_event.is_set():
+            return
+        try:
+            result = _post('/api/app/start-saved')
+            if result.get('ok'):
+                return
+            if result.get('error') != 'saved_devices_unavailable':
+                print('Automatic processing not started: '+str(result.get('error')), flush=True)
+                return
+        except Exception as error:
+            print('Automatic processing attempt: '+str(error), flush=True)
+        if _quit_event.wait(3):
+            return
+
+
+def _background_window():
+    global _force_tray
+    _force_tray = True
+    if not _start_tray():
+        return False
+    if _window is not None:
+        _window.hide()
+    _console_minimize()
+    return True
+
+
+def _restart_application():
+    executable = Path(__file__).resolve().parents[1]/'AECStudio.exe'
+    if not executable.is_file():
+        return False
+    subprocess.Popen([str(executable),'--wait-for-pid',str(os.getpid()),'--show'],
+                     cwd=str(executable.parent),creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    _tray_quit()
+    return True
+
+
+def _wait_for_open():
+    while not _quit_event.is_set():
+        if _open_window_event.wait(.25):
+            _open_window_event.clear()
+            return True
+    return False
+
+
+def _shutdown():
+    global _quitting
+    _quitting = True
+    _quit_event.set()
+    if _owns_server:
+        try:
+            from . import server
+            server.stop()
+        except Exception as error:
+            print('Audio shutdown: '+str(error), flush=True)
+        if _server is not None:
+            _server.should_exit = True
+    if _tray is not None:
+        try:
+            _tray.stop()
+        except Exception:
+            pass
+
+
+def _tray_toggle_processing(icon=None, item=None):
+    def toggle():
+        try:
+            with urllib.request.urlopen(URL+'api/state', timeout=3) as response:
+                state = json.loads(response.read())
+                running = state.get('running') or state.get('onDemandArmed')
+            result = _post('/api/stop' if running else '/api/app/start-saved')
+            if not result.get('ok') and _tray is not None:
+                _tray.notify(str(result.get('error')), TITLE)
+        except Exception as error:
+            print('Tray processing: '+str(error), flush=True)
+    threading.Thread(target=toggle, daemon=True, name='tray-processing').start()
 
 
 def _port_answers():
@@ -278,7 +381,8 @@ def _tray_icon():
     image asset being present."""
     from PIL import Image
     here = os.path.dirname(os.path.abspath(__file__))
-    for cand in (os.path.join(here, "ui", "favicon.ico"),
+    for cand in (os.path.join(here, "ui", "tray.png"),
+                 os.path.join(here, "ui", "favicon.ico"),
                  os.path.join(here, "..", "resources", "app.ico")):
         try:
             if os.path.isfile(cand):
@@ -311,28 +415,65 @@ def _tray_icon():
 
 def _start_tray():
     global _tray
-    import pystray
-    _tray = pystray.Icon(
-        "aec-web", _tray_icon(), TITLE,
-        pystray.Menu(
-            pystray.MenuItem("Show", _tray_show),
-            pystray.MenuItem("Quit", _tray_quit)))
-    threading.Thread(target=_tray.run, daemon=True,
-                     name="tray").start()
+    with _tray_lock:
+        if _tray is not None:
+            _tray.visible = True
+            return True
+        try:
+            import pystray
+            ready = threading.Event()
+            failures = []
+            _tray = pystray.Icon(
+                'aec-studio', _tray_icon(), TITLE,
+                pystray.Menu(
+                    pystray.MenuItem('打开工作台 / Open', _tray_show, default=True),
+                    pystray.MenuItem('开始或停止处理 / Start or stop', _tray_toggle_processing),
+                    pystray.MenuItem('退出 / Exit', _tray_quit)))
+
+            def setup(icon):
+                icon.visible = True
+                ready.set()
+
+            def run():
+                try:
+                    tray.run(setup=setup)
+                except Exception as error:
+                    failures.append(error)
+                    ready.set()
+            tray = _tray
+            threading.Thread(target=run, daemon=True, name='tray').start()
+            if not ready.wait(3) or failures:
+                print('Tray unavailable: '+str(failures), flush=True)
+                try:
+                    tray.stop()
+                except Exception:
+                    pass
+                _tray = None
+                return False
+            return True
+        except Exception as error:
+            print('Tray unavailable: '+str(error), flush=True)
+            _tray = None
+            return False
 
 
 def _tray_show(icon=None, item=None):
+    global _force_tray
+    _force_tray = False
     if _window is not None:
         _window.show()
-        _console_restore()
+    else:
+        _open_window_event.set()
 
 
 def _tray_quit(icon=None, item=None):
     global _quitting
     _quitting = True
+    _quit_event.set()
     if _tray is not None:
         _tray.visible = False
-    _console_restore()  # the exit messages +
+    if _tray is not None:
+        _tray.stop()
     if _window is not None:  # pause must be seen
         _window.destroy()
 
@@ -344,9 +485,8 @@ def _on_closing():
     if _quitting:
         return True
     if _prefs().get("trayEnabled"):
-        _window.hide()
-        _console_minimize()
-        return False
+        if _background_window():
+            return False
     return True
 
 
@@ -357,7 +497,7 @@ def _watch_prefs():
     the server runs in another process."""
     while not _quitting:
         try:
-            want = bool(_prefs().get("trayEnabled"))
+            want = _force_tray or bool(_prefs().get("trayEnabled"))
         except Exception:
             want = False
         if want and _tray is None:
@@ -367,8 +507,14 @@ def _watch_prefs():
         time.sleep(1.0)
 
 
-def main():
-    global _window
+def main(argv=None):
+    global _window, _owns_server, _force_tray
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--background', action='store_true')
+    parser.add_argument('--auto-start', action='store_true')
+    parser.add_argument('--no-auto-start', action='store_true')
+    parser.add_argument('--show', action='store_true')
+    arguments = parser.parse_args(argv)
     if sys.platform == "win32":
         # Own taskbar identity: without this the taskbar button is
         # labeled "Python 3.12 (64-bit)" (python.exe's version resource)
@@ -377,10 +523,11 @@ def main():
         try:
             import ctypes
             ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
-                "AECClient.AECWeb")
+                "AECStudio.Desktop")
         except Exception:
             pass
     owned = not _port_answers()
+    _owns_server = owned
     server_thread = None
     if owned:
         server_thread = threading.Thread(
@@ -400,12 +547,32 @@ def main():
         print("[-] attached to the running server - "
               "close the window to exit.", flush=True)
 
+    options = _startup_options()
+    hidden = not arguments.show and (arguments.background or options.get('startInBackground', False))
+    automatic = (arguments.auto_start or options.get('autoStartProcessing', False)) and not arguments.no_auto_start
+    if owned:
+        from .server import app
+        app.state.background_handler = _background_window
+        app.state.quit_handler = _tray_quit
+        app.state.show_handler = _tray_show
+        app.state.restart_handler = _restart_application
+        app.state.desktop_status = lambda: {'windowCreated':_window is not None,'trayAvailable':_tray is not None}
+    if automatic and owned:
+        threading.Thread(target=_auto_start_processing, daemon=True, name='auto-processing').start()
+    _force_tray = bool(hidden)
+    if hidden and _start_tray():
+        _console_minimize()
+        if not _wait_for_open():
+            _shutdown()
+            if server_thread is not None:
+                server_thread.join(timeout=3)
+            return 0
     hide_timer = None
     try:
         import webview
         _window = webview.create_window(
-            TITLE, URL, width=720, height=1020,
-            min_size=(680, 900), resizable=True)
+            TITLE, URL, width=1320, height=940,
+            min_size=(1000, 760), resizable=True)
         _window.events.closing += _on_closing
         if _prefs().get("trayEnabled"):
             # App-like: once the page loads, the
@@ -450,8 +617,7 @@ def main():
 
     # Window closed.
     if owned:
-        if _server is not None:
-            _server.should_exit = True
+        _shutdown()
         if server_thread is not None:
             server_thread.join(timeout=2.0)
     return 0

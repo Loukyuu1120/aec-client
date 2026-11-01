@@ -1,4 +1,14 @@
-# AEC Client
+# AEC Studio
+
+本分支是基于 AEC Client 的 Windows 中文语音工作台，提供声纹注册、目标人声提取、回声消除、处理前后试听、托盘运行及按需使用麦克风。模型在本地运行，声纹和录音保存在本机。
+
+源码运行：先执行 `Setup.cmd`，再执行 `Start.cmd`。安装版构建说明见 [Windows 打包说明](packaging/windows/README.md)。CUDA 通过界面检测并引导配置，虚拟麦克风使用官方 VB-CABLE 驱动。
+
+安装程序 0.11.2：检测到工作台运行时，点击“确定”会请求工作台正常退出，等待关闭后继续；取消则中止安装。静默安装遇到运行中的工作台会返回失败，不自动结束它。应用运行时版本仍为 0.11.0。
+
+仓库不包含个人声纹、测试录音、Python 环境或大型目标提取权重；依赖及模型由设置或构建流程获取。以下保留上游项目的说明，旧版桌面程序和旧版 Web UI 的描述不代表本分支工作台的功能。
+
+## Upstream AEC Client
 
 > Speech enhancement wrapper for Windows: acoustic echo cancellation (AEC3, NKF-AEC, DTLN) + noise suppression (DTLN-NS, Hush, GTCRN) → virtual mic for Discord, Zoom, Teams, and other voice apps.
 

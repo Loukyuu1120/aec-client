@@ -65,16 +65,16 @@ Start.cmd
 
 仓库使用 [Windows Release 工作流](.github/workflows/release.yml)。推送 `v版本号` 标签后，GitHub Actions 在 Windows 上准备依赖、运行测试、构建安装包，并发布 Release，附带安装包及 SHA-256 校验文件。
 
-版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前安装程序版本为 `0.11.2`：
+版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前安装程序版本为 `0.11.3`：
 
 ```sh
-git tag v0.11.2
-git push origin v0.11.2
+git tag v0.11.3
+git push origin v0.11.3
 ```
 
 也可在 Actions 页面手动运行工作流：默认只构建验证，勾选发布选项后创建 Release。已有 Release 不会被覆盖。普通代码推送不会自动生成新版本。
 
-当前安装程序版本为 **0.11.2**，内嵌应用运行时版本为 **0.11.0**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
+当前安装程序版本为 **0.11.3**，内嵌应用运行时版本为 **0.11.0**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
 
 ## 来源与许可
 

@@ -36,6 +36,12 @@ jobs:
         with:
           python-version: '3.12.10'
           architecture: x64
+          cache: pip
+          cache-dependency-path: |
+            requirements-studio.txt
+            web/requirements-base.txt
+            web/requirements-window.txt
+            web/requirements-engines.txt
       - name: Validate version
         id: version
         run: |
@@ -69,12 +75,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Release input preparation failed' }
           .venv/Scripts/python.exe -c "from huggingface_hub import hf_hub_download; hf_hub_download('TaurenMountain/PS4', 'checkpoint_epoch037.pt', revision='8feb7a1b3da1264659f155c42bfb40a5be88d730', local_dir='models/ps4')"
           if ($LASTEXITCODE -ne 0) { throw 'PS4 model download failed' }
-      - name: Install Inno Setup
+      - name: Locate Inno Setup
         run: |
-          choco upgrade innosetup --version=7.1.1 --yes --no-progress --allow-downgrade
-          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup installation failed' }
-          $compiler = Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup */ISCC.exe","$env:ProgramFiles/Inno Setup */ISCC.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          $compiler = Get-ChildItem "${env:ProgramFiles(x86)}/Inno Setup */ISCC.exe","$env:ProgramFiles/Inno Setup */ISCC.exe" -ErrorAction SilentlyContinue | Sort-Object { [version]$_.VersionInfo.FileVersion } -Descending | Select-Object -First 1
           if (-not $compiler) { throw 'Inno Setup compiler missing' }
+          if ([version]$compiler.VersionInfo.FileVersion -lt [version]'6.5.0') { throw 'Inno Setup 6.5 or newer is required' }
+          Write-Output "Using $($compiler.FullName), version $($compiler.VersionInfo.FileVersion)"
           "INNO_COMPILER=$($compiler.FullName)" >> $env:GITHUB_ENV
       - name: Build installer
         run: |

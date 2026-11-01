@@ -17,7 +17,7 @@ AppId={{97679BC7-A8C2-4D7E-A715-E32A20B897F2}
 AppName=AEC Studio
 PrivilegesRequired=admin
 #endif
-AppVersion=0.11.2
+AppVersion=0.11.3
 AppPublisher=AEC Studio Personal Build
 DefaultDirName={autopf}\AEC Studio
 DefaultGroupName=AEC Studio
@@ -26,7 +26,7 @@ OutputDir={#OutputRoot}
 #ifdef BenchmarkOnly
 OutputBaseFilename={#BenchName}
 #else
-OutputBaseFilename=AECStudio-Setup-0.11.2-x64
+OutputBaseFilename=AECStudio-Setup-0.11.3-x64
 #endif
 SetupIconFile={#StageRoot}\resources\app.ico
 ArchitecturesAllowed=x64compatible
@@ -45,7 +45,7 @@ LicenseFile={#StageRoot}\LICENSE
 InfoBeforeFile={#StageRoot}\安装须知.txt
 
 [Languages]
-Name: "chinesesimp"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimp"; MessagesFile: "languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]

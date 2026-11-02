@@ -6,7 +6,9 @@ Build with PowerShell 7 and the system .NET Framework C# compiler. `scripts/buil
 
 The `Windows Release` GitHub Actions workflow prepares a clean Python 3.12.10 environment, downloads pinned CPU PyTorch wheels and the PS4 checkpoint, validates public build inputs, runs regression tests and builds on Windows Server 2022. It uses the runner's installed Inno Setup compiler (6.5 or newer). Microsoft redistributables are checked for valid signatures before packaging. SpeakerBeam weights and personal data remain excluded.
 
-Push a tag matching `AppVersion` in `AECStudio.iss` (for example `v0.11.4`) to build and publish the installer, checksum and dependency list. The workflow also supports manual builds without publishing; enable the publish input to create a Release. Existing Releases are never overwritten. Build artifacts are retained for 14 days. Version or test failures prevent publication.
+Push a tag matching `AppVersion` in `AECStudio.iss` (for example `v0.11.5`) to build and publish the installer, checksum and dependency list. The workflow also supports manual builds without publishing; enable the publish input to create a Release. Existing Releases are never overwritten. Build artifacts are retained for 14 days. Version or test failures prevent publication.
+
+Installer 0.11.5 waits up to 60 seconds after driver binding for audio endpoints and checks Configuration Manager for `CM_PROB_NEED_RESTART`. Code 3 means the driver exists but endpoints are unavailable; it completes file installation with a warning and disables automatic launch. It does not reinstall an existing driver or assume a restart will fix every failure. Driver checks and results are logged to `%PROGRAMDATA%\AECStudio\driver-install.log`. A healthy existing-driver check was verified locally; first installation on the affected computer still requires confirmation.
 
 `languages/ChineseSimplified.isl` is preserved from the upstream Inno Setup `is-7_1_1` source distribution, with its translator attribution. Keeping the translation in the repository avoids relying on optional language files on hosted runners.
 

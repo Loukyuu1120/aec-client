@@ -17,7 +17,7 @@ AppId={{97679BC7-A8C2-4D7E-A715-E32A20B897F2}
 AppName=AEC Studio
 PrivilegesRequired=admin
 #endif
-AppVersion=0.11.4
+AppVersion=0.11.5
 AppPublisher=AEC Studio Personal Build
 DefaultDirName={autopf}\AEC Studio
 DefaultGroupName=AEC Studio
@@ -26,7 +26,7 @@ OutputDir={#OutputRoot}
 #ifdef BenchmarkOnly
 OutputBaseFilename={#BenchName}
 #else
-OutputBaseFilename=AECStudio-Setup-0.11.4-x64
+OutputBaseFilename=AECStudio-Setup-0.11.5-x64
 #endif
 SetupIconFile={#StageRoot}\resources\app.ico
 ArchitecturesAllowed=x64compatible
@@ -81,6 +81,7 @@ var
   ReadyToLaunch: Boolean;
   PayloadReused, PayloadWritten: TStringList;
   RuntimeChanged: Boolean;
+  DriverUnavailable: Boolean;
 
 function ExitRunningStudio: Boolean;
 var
@@ -231,10 +232,18 @@ begin
   if not Exec(Helper, '--check', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) then
     RaiseException('无法检测虚拟麦克风驱动。');
   if Code = 2 then
-    RunRequired(Helper, '--install "' + ExpandConstant('{app}\drivers\vbcable\vbMmeCable64_win10.inf') + '"',
-      '未检测到虚拟声卡，正在安装并等待 Windows 识别')
-  else if Code = 3 then
-    RaiseException('已检测到 VB-CABLE 驱动，但输入或输出设备不可用。请检查设备是否被禁用；不会重新安装现有驱动。')
+  begin
+    WizardForm.StatusLabel.Caption := '正在安装虚拟声卡并等待 Windows 识别（最多 60 秒）';
+    if not Exec(Helper, '--install "' + ExpandConstant('{app}\drivers\vbcable\vbMmeCable64_win10.inf') + '"',
+      ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code) then
+      RaiseException('无法启动虚拟声卡安装组件。');
+  end;
+  if (Code = 3010) or (Code = 1641) then
+    RequiredRestart := True
+  else if Code = 3 then begin
+    DriverUnavailable := True;
+    Log('VB-CABLE driver present but endpoints unavailable; installation will finish without launching.');
+  end
   else if Code <> 0 then
     RaiseException('虚拟声卡检测失败，未尝试覆盖现有驱动。');
   if not PinnedModelReady then
@@ -249,12 +258,23 @@ begin
     SaveStringToFile(ExpandConstant('{app}\.runtime-ready'), '{#PayloadRuntimeId}', False);
   end;
   Log('Payload files reused: ' + IntToStr(PayloadReused.Count) + '; written: ' + IntToStr(PayloadWritten.Count));
-  ReadyToLaunch := not RequiredRestart;
+  ReadyToLaunch := not RequiredRestart and not DriverUnavailable;
+  if DriverUnavailable then begin
+    WizardForm.FinishedLabel.Caption := 'AEC Studio 文件已安装，但虚拟声卡输入或输出尚不可用，暂时无法用于通话。请在 Windows 声音设置检查 CABLE Input / CABLE Output 是否被禁用，或请管理员检查设备管理器。详细记录：' + ExpandConstant('{commonappdata}\AECStudio\driver-install.log');
+    if not WizardSilent then
+      MsgBox(WizardForm.FinishedLabel.Caption, mbInformation, MB_OK);
+  end;
 end;
 
 function NeedRestart: Boolean;
 begin
   Result := RequiredRestart;
+end;
+
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if (CurPageID = wpFinished) and DriverUnavailable then
+    WizardForm.FinishedLabel.Caption := 'AEC Studio 文件已安装，但虚拟声卡尚不可用。请检查 CABLE Input / CABLE Output 是否被禁用，或请管理员查看设备管理器。诊断记录：' + ExpandConstant('{commonappdata}\AECStudio\driver-install.log');
 end;
 
 function CanLaunch: Boolean;

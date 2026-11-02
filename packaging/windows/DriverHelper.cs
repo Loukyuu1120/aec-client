@@ -12,6 +12,21 @@ internal static class DriverHelper
     private static Guid MediaClass = new Guid("4d36e96c-e325-11ce-bfc1-08002be10318");
     private static Guid EndpointClass = new Guid("c166523c-fe0c-4a94-a586-f1a80cfbbf3e");
     private static readonly IntPtr InvalidHandle = new IntPtr(-1);
+    private static bool restartPending;
+
+    private static void Log(string message)
+    {
+        try
+        {
+            string folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "AECStudio");
+            Directory.CreateDirectory(folder);
+            File.AppendAllText(Path.Combine(folder, "driver-install.log"), DateTime.UtcNow.ToString("O") + " " + message + Environment.NewLine);
+        }
+        catch { }
+    }
+
+    [DllImport("cfgmgr32.dll")]
+    private static extern uint CM_Get_DevNode_Status(out uint status, out uint problem, uint instance, uint flags);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct DeviceInfo
@@ -48,7 +63,7 @@ internal static class DriverHelper
         byte[] buffer = new byte[16384];
         uint type, required;
         if (!SetupDiGetDeviceRegistryPropertyW(devices, ref info, property, out type, buffer, (uint)buffer.Length, out required)) return "";
-        return Encoding.Unicode.GetString(buffer, 0, (int)Math.Min(required, (uint)buffer.Length));
+        return Encoding.Unicode.GetString(buffer, 0, (int)Math.Min(required, (uint)buffer.Length)).TrimEnd('\0');
     }
 
     private static bool DriverPresent()
@@ -62,7 +77,14 @@ internal static class DriverHelper
             for (uint index = 0; SetupDiEnumDeviceInfo(devices, index, ref info); index++)
             {
                 foreach (string hardware in Property(devices, ref info, 1).Split('\0'))
-                    if (String.Equals(hardware, HardwareId, StringComparison.OrdinalIgnoreCase)) return true;
+                    if (String.Equals(hardware, HardwareId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        uint status, problem;
+                        uint result = CM_Get_DevNode_Status(out status, out problem, info.DeviceInstance, 0);
+                        restartPending = result == 0 && (status & 0x400) != 0 && problem == 14;
+                        Log("Driver present; statusResult=" + result + "; status=" + status + "; problem=" + problem);
+                        return true;
+                    }
             }
             return false;
         }
@@ -92,7 +114,7 @@ internal static class DriverHelper
 
     private static bool WaitForEndpoints()
     {
-        for (int attempt = 0; attempt < 20; attempt++)
+        for (int attempt = 0; attempt < 120; attempt++)
         {
             if (EndpointsReady()) return true;
             Thread.Sleep(500);
@@ -103,7 +125,7 @@ internal static class DriverHelper
     private static int Install(string filename)
     {
         if (!new WindowsPrincipal(WindowsIdentity.GetCurrent()).IsInRole(WindowsBuiltInRole.Administrator)) return 5;
-        if (DriverPresent()) return WaitForEndpoints() ? 0 : 3;
+        if (DriverPresent()) return restartPending ? 3010 : WaitForEndpoints() ? 0 : 3;
         string inf = Path.GetFullPath(filename);
         if (!File.Exists(inf) || !String.Equals(Path.GetFileName(inf), "vbMmeCable64_win10.inf", StringComparison.OrdinalIgnoreCase)) return 2;
         Guid classGuid;
@@ -128,7 +150,9 @@ internal static class DriverHelper
             if (!UpdateDriverForPlugAndPlayDevicesW(IntPtr.Zero, HardwareId, inf, 1, out reboot)) throw new Win32Exception(Marshal.GetLastWin32Error());
             installed = true;
             if (reboot) return 3010;
-            return WaitForEndpoints() ? 0 : 3;
+            if (WaitForEndpoints()) return 0;
+            DriverPresent();
+            return restartPending ? 3010 : 3;
         }
         finally
         {
@@ -137,14 +161,14 @@ internal static class DriverHelper
         }
     }
 
-    private static int Main(string[] args)
+    private static int Run(string[] args)
     {
         try
         {
             if (args.Length == 1 && args[0] == "--check")
             {
                 if (!DriverPresent()) return 2;
-                return EndpointsReady() ? 0 : 3;
+                return restartPending ? 3010 : EndpointsReady() ? 0 : 3;
             }
             if (args.Length == 2 && args[0] == "--install") return Install(args[1]);
             return 64;
@@ -160,5 +184,12 @@ internal static class DriverHelper
             catch { }
             return 1;
         }
+    }
+
+    private static int Main(string[] args)
+    {
+        int result = Run(args);
+        Log(String.Join(" ", args) + "; result=" + result);
+        return result;
     }
 }

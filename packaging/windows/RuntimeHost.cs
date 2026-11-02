@@ -6,8 +6,8 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("AEC Studio")]
 [assembly: AssemblyProduct("AEC Studio")]
 [assembly: AssemblyDescription("AEC Studio audio processing")]
-[assembly: AssemblyVersion("0.11.0.0")]
-[assembly: AssemblyFileVersion("0.11.0.0")]
+[assembly: AssemblyVersion("0.11.6.0")]
+[assembly: AssemblyFileVersion("0.11.6.0")]
 
 internal static class RuntimeHost
 {

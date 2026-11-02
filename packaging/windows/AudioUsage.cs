@@ -18,6 +18,7 @@ namespace AECStudio.Interop
     public sealed class CaptureUsage : IDisposable
     {
         private readonly string expectedName;
+        private readonly bool standardCable;
         private readonly ManualResetEvent stopped = new ManualResetEvent(false);
         private readonly object sessionsLock = new object();
         private readonly List<IAudioSessionControl> sessions = new List<IAudioSessionControl>();
@@ -30,11 +31,58 @@ namespace AECStudio.Interop
         {
             int marker = outputName.IndexOf(" Input", StringComparison.OrdinalIgnoreCase);
             expectedName = marker < 0 ? "" : outputName.Substring(0, marker) + " Output" + outputName.Substring(marker + 6);
+            standardCable = IsStandardCableName(outputName);
             Publish(false, 0, "starting");
             thread = new Thread(Watch);
             thread.IsBackground = true;
             thread.SetApartmentState(ApartmentState.MTA);
             thread.Start();
+        }
+
+        public static bool IsStandardCableName(string name)
+        {
+            return name.IndexOf("VB-Audio Virtual Cable", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                name.Replace(" ", "").IndexOf("16ch", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        public static bool CableEndpointsReady()
+        {
+            int initialized = CoInitializeEx(IntPtr.Zero, 0);
+            IMMDeviceEnumerator enumerator = null;
+            try
+            {
+                Check(initialized);
+                enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
+                for (int flow = 0; flow <= 1; flow++)
+                {
+                    IMMDeviceCollection devices = null;
+                    bool found = false;
+                    try
+                    {
+                        Check(enumerator.EnumAudioEndpoints(flow, 1, out devices));
+                        uint count;
+                        Check(devices.GetCount(out count));
+                        for (uint index = 0; index < count; index++)
+                        {
+                            IMMDevice device = null;
+                            try
+                            {
+                                Check(devices.Item(index, out device));
+                                found |= IsStandardCableName(FriendlyName(device));
+                            }
+                            finally { Release(device); }
+                        }
+                    }
+                    finally { Release(devices); }
+                    if (!found) return false;
+                }
+                return true;
+            }
+            finally
+            {
+                Release(enumerator);
+                if (initialized >= 0) CoUninitialize();
+            }
         }
 
         public UsageSnapshot Read()
@@ -130,7 +178,7 @@ namespace AECStudio.Interop
                     bool registered = false;
                     try
                     {
-                        if (expectedName.Length == 0) throw new InvalidOperationException("unsupported_virtual_output");
+                        if (expectedName.Length == 0 && !standardCable) throw new InvalidOperationException("unsupported_virtual_output");
                         enumerator = (IMMDeviceEnumerator)new MMDeviceEnumerator();
                         Check(enumerator.EnumAudioEndpoints(1, 1, out devices));
                         uint count;
@@ -139,7 +187,9 @@ namespace AECStudio.Interop
                         {
                             IMMDevice device;
                             Check(devices.Item(index, out device));
-                            bool matches = String.Equals(FriendlyName(device), expectedName, StringComparison.OrdinalIgnoreCase);
+                            string name = FriendlyName(device);
+                            bool matches = String.Equals(name, expectedName, StringComparison.OrdinalIgnoreCase) ||
+                                (standardCable && IsStandardCableName(name));
                             if (matches)
                             {
                                 if (selected != null) { Release(device); throw new InvalidOperationException("ambiguous_virtual_input"); }

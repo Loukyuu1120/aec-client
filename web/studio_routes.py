@@ -120,7 +120,7 @@ def install(server):
                 'model': {'speakerbeam':'TD-SpeakerBeam · paired 512D cue',
                           'ps4':'PS4 · WeSep BSRNN + WeSpeaker ECAPA-TDNN',
                           'verified':'SpeakerBeam + PS4 target-absence verification'}[settings['extractionModel']],
-                'targetBufferMs': 1500 if settings['extractionModel']=='verified' else 2000, 'version': '0.11.0'}
+                'targetBufferMs': 1500 if settings['extractionModel']=='verified' else 2000, 'version': '0.11.6'}
 
     @app.post('/api/voiceprint/reset-learning')
     def reset_learning():

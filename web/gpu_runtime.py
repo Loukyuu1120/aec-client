@@ -170,7 +170,7 @@ class GpuRuntimeManager:
                     self._update(progress=(package_index+1)*40)
                     return target
         temporary = target.with_suffix(target.suffix+'.part')
-        request = urllib.request.Request(url, headers={'User-Agent':'AECStudio-GpuSetup/0.11.0'})
+        request = urllib.request.Request(url, headers={'User-Agent':'AECStudio-GpuSetup/0.11.6'})
         with urllib.request.urlopen(request, timeout=60) as response, temporary.open('wb') as output:
             total = int(response.headers.get('Content-Length', 0))
             copied = 0

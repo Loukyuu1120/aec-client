@@ -10,7 +10,6 @@ internal static class DriverHelper
 {
     private const string HardwareId = "VBAudioVACWDM";
     private static Guid MediaClass = new Guid("4d36e96c-e325-11ce-bfc1-08002be10318");
-    private static Guid EndpointClass = new Guid("c166523c-fe0c-4a94-a586-f1a80cfbbf3e");
     private static readonly IntPtr InvalidHandle = new IntPtr(-1);
     private static bool restartPending;
 
@@ -93,23 +92,14 @@ internal static class DriverHelper
 
     private static bool EndpointsReady()
     {
-        IntPtr devices = SetupDiGetClassDevsW(ref EndpointClass, IntPtr.Zero, IntPtr.Zero, 2);
-        if (devices == InvalidHandle) return false;
-        bool input = false, output = false;
         try
         {
-            DeviceInfo info = new DeviceInfo();
-            info.Size = (uint)Marshal.SizeOf(typeof(DeviceInfo));
-            for (uint index = 0; SetupDiEnumDeviceInfo(devices, index, ref info); index++)
-            {
-                string name = Property(devices, ref info, 12);
-                if (name.Length == 0) name = Property(devices, ref info, 0);
-                input |= name.IndexOf("CABLE Input", StringComparison.OrdinalIgnoreCase) >= 0;
-                output |= name.IndexOf("CABLE Output", StringComparison.OrdinalIgnoreCase) >= 0;
-            }
-            return input && output;
+            string library = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", "AECStudioAudio.dll");
+            System.Reflection.Assembly assembly = System.Reflection.Assembly.LoadFrom(library);
+            Type monitor = assembly.GetType("AECStudio.Interop.CaptureUsage", true);
+            return (bool)monitor.GetMethod("CableEndpointsReady").Invoke(null, null);
         }
-        finally { SetupDiDestroyDeviceInfoList(devices); }
+        catch (Exception error) { Log("Endpoint check failed: " + error); return false; }
     }
 
     private static bool WaitForEndpoints()

@@ -143,7 +143,10 @@ def _is_pseudo(name: str) -> bool:
 
 
 def _is_cable_input(name: str) -> bool:
-    return _is_virtual_cable(name) and "input" in name.lower()
+    low = name.lower()
+    if '16ch' in low.replace(' ', '') or 'output' in low:
+        return False
+    return _is_virtual_cable(name) and ('input' in low or 'vb-audio virtual cable' in low)
 
 
 _HOSTAPI_RANK = {"wasapi": 3, "directsound": 2, "mme": 1,
@@ -225,17 +228,11 @@ def _snap(index, entries, by_name=None):
 
 
 def _find_cable_input(entries):
-    """First CABLE Input in the playback list, else first cable
-    device, else None (main.cpp FindCableInputIndex)."""
-    fallback = None
+    """Find the standard cable playback port, including localized names."""
     for e in entries:
-        if not _is_virtual_cable(e["name"]):
-            continue
-        if fallback is None:
-            fallback = e["index"]
         if _is_cable_input(e["name"]):
             return e["index"]
-    return fallback
+    return None
 
 
 def speaker_output_for_ref(ref_name, playback):
@@ -338,6 +335,8 @@ def list_devices():
             out["capture"] = _dedupe(cap, pa)
             out["loopback"] = _dedupe(ref, pa)
             out["playback"] = _dedupe(play, pa)
+            for endpoint in out['playback']:
+                endpoint['isCableInput'] = _is_cable_input(endpoint['name'])
 
             # Windows system default input, snapped onto the
             # filtered mic list (main.cpp FindSystemDefaultIndex).
@@ -697,12 +696,15 @@ class AudioRunner:
     def start(self):
         _process_qos(True)
         self._pa = pa_patch.PyAudio()
-        self._mic_rate = int(self._pa.get_device_info_by_index(
-            self.mic_idx).get("defaultSampleRate", 48000) or 48000)
-        self._ref_rate = int(self._pa.get_device_info_by_index(
-            self.ref_idx).get("defaultSampleRate", 48000) or 48000)
-        self._out_rate = (48000 if self.capture_only else int(self._pa.get_device_info_by_index(
-            self.out_idx).get("defaultSampleRate", 48000) or 48000))
+        from .audio_formats import open_pcm_stream
+        mic_s, self._mic_rate, _ = open_pcm_stream(self._pa, pa_patch, self.mic_idx, self._on_mic, capture=True)
+        self._streams.append(mic_s)
+        ref_s, self._ref_rate, _ = open_pcm_stream(self._pa, pa_patch, self.ref_idx, self._on_ref, capture=True)
+        self._streams.append(ref_s)
+        self._out_rate = 48000
+        if not self.capture_only:
+            out_s, self._out_rate, _ = open_pcm_stream(self._pa, pa_patch, self.out_idx, self._on_out, capture=False)
+            self._streams.append(out_s)
         # Exact-ratio resamplers, one per stream (positions are stream
         # state and must never be shared or reused across restarts).
         from .resampling import CaptureResampler
@@ -711,29 +713,13 @@ class AudioRunner:
         self._rs_out = dsp.LinearResampler(self.sample_rate / self._out_rate)
         self._rs_mon = dsp.LinearResampler(self.sample_rate / self._mon_rate)
         self._out_carry = dsp._StreamBuf()
-        mic_s = self._pa.open(format=pa_patch.paInt16, channels=1,
-                              rate=self._mic_rate, input=True,
-                              input_device_index=self.mic_idx,
-                              frames_per_buffer=max(128, self._mic_rate//100),
-                              stream_callback=self._on_mic)
-        self._streams.append(mic_s)
-        ref_s = self._pa.open(format=pa_patch.paInt16, channels=1,
-                              rate=self._ref_rate, input=True,
-                              input_device_index=self.ref_idx,
-                              frames_per_buffer=max(128, self._ref_rate//100),
-                              stream_callback=self._on_ref)
-        self._streams.append(ref_s)
-        if not self.capture_only:
-            out_s = self._pa.open(format=pa_patch.paInt16, channels=1,
-                                  rate=self._out_rate, output=True,
-                                  output_device_index=self.out_idx,
-                                  frames_per_buffer=max(128, self._out_rate//100),
-                                  stream_callback=self._on_out)
-            self._streams.append(out_s)
+        for stream in self._streams:
+            stream.start_stream()
 
         # Local monitor: fail-open — a device that refuses to open
         # must never block Start, the pads just stay in the cable.
         if self.monitor_idx is not None and not self.capture_only:
+            mon_s = None
             try:
                 self._mon_rate = int(self._pa.get_device_info_by_index(
                     self.monitor_idx).get("defaultSampleRate", 48000) or 48000)
@@ -745,13 +731,14 @@ class AudioRunner:
                         self._mon_q.get_nowait()
                     except queue.Empty:
                         break
-                self._streams.append(self._pa.open(
-                    format=pa_patch.paInt16, channels=1,
-                    rate=self._mon_rate, output=True,
-                    output_device_index=self.monitor_idx,
-                    frames_per_buffer=max(128, self._mon_rate//100),
-                    stream_callback=self._on_mon))
+                mon_s, self._mon_rate, _ = open_pcm_stream(self._pa, pa_patch, self.monitor_idx,
+                                                          self._on_mon, capture=False)
+                self._rs_mon = dsp.LinearResampler(self.sample_rate / self._mon_rate)
+                mon_s.start_stream()
+                self._streams.append(mon_s)
             except Exception:
+                if mon_s is not None:
+                    mon_s.close()
                 self.monitor_idx = None
 
         self._stop.clear()

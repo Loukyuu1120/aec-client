@@ -9,12 +9,13 @@ from web.audio import AudioRunner
 class WidebandTests(unittest.TestCase):
     def test_capture_only_never_opens_output_or_monitor(self):
         audio = Mock()
-        audio.get_device_info_by_index.return_value = {'defaultSampleRate':48000}
+        audio.get_device_info_by_index.return_value = {'defaultSampleRate':48000, 'maxInputChannels':2}
         runner = AudioRunner(Chain(),1,2,0,monitor_idx=3,capture_only=True)
         with patch('web.audio.pa_patch.PyAudio',return_value=audio):
             try:
                 runner.start()
                 self.assertEqual(audio.open.call_count,2)
+                self.assertEqual(audio.open.return_value.start_stream.call_count,2)
                 self.assertTrue(all(call.kwargs.get('input') for call in audio.open.call_args_list))
                 self.assertFalse(any(call.kwargs.get('output') for call in audio.open.call_args_list))
                 self.assertTrue(all(call.kwargs['frames_per_buffer'] == 480 for call in audio.open.call_args_list))

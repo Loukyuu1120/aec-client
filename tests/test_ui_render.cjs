@@ -103,3 +103,14 @@ console.log('Passed: saved tuning values and stale-preview warnings.');
  assert.ok($('microphoneDemandStatus').textContent.includes('voice-app'));
 }
 console.log('Passed: on-demand standby and consuming-application status.');
+
+const missingCableExpression = source.match(/const missing=([^;]+);\$\('deviceError'\)/)[1];
+for (const [playback, expected] of [
+ [[{name:'扬声器 (VB-Audio Virtual Cable)',isCableInput:true}],false],
+ [[{name:'CABLE In 16 Ch (VB-Audio Virtual Cable)',isCableInput:false}],true],
+ [[{name:'CABLE Input (VB-Audio Virtual Cable)'}],false],
+ [[{name:'Speakers (Realtek Audio)',isCableInput:false}],true]
+]) {
+ assert.equal(vm.runInNewContext(missingCableExpression,{inventory:{playback}}),expected);
+}
+console.log('Passed: localized virtual output and exclusion of the 16-channel port.');

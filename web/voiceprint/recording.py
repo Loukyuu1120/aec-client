@@ -81,9 +81,9 @@ class EnrollmentRecorder:
                         capture_errors.append(str(error))
                 return None, pa.paContinue
 
-            stream = audio.open(format=pa.paInt16, channels=1, rate=rate, input=True,
-                                input_device_index=device, frames_per_buffer=128,
-                                stream_callback=on_audio, start=False)
+            from ..audio_formats import open_pcm_stream
+            stream, rate, channels = open_pcm_stream(audio, pa, device, on_audio,
+                                                     capture=True, frames_per_buffer=128)
             self.status = 'recording'
             stream.start_stream()
             chunks, count = [], 0

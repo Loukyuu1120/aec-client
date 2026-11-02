@@ -64,8 +64,8 @@ def start_saved_processing(server, settings, has_profile, starter=None):
     saved = settings.get('devices', {})
     if not all(saved.get(key) for key in ('mic', 'ref', 'out')):
         return {'ok': False, 'error': 'saved_devices_unavailable'}
-    from .audio import _is_virtual_cable
-    if not _is_virtual_cable(saved['out']):
+    from .audio import _is_cable_input
+    if not _is_cable_input(saved['out']):
         return {'ok': False, 'error': 'saved_virtual_output_unavailable'}
     inventory = server.list_devices()
     resolved = {}

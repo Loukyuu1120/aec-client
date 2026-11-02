@@ -93,16 +93,18 @@ Start.cmd
 
 仓库使用 [Windows Release 工作流](.github/workflows/release.yml)。推送 `v版本号` 标签后，GitHub Actions 在 Windows 上准备依赖、运行测试、构建安装包，并发布 Release，附带安装包及 SHA-256 校验文件。
 
-版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前安装程序版本为 `0.11.5`：
+版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前版本为 `0.11.6`：
 
 ```sh
-git tag v0.11.5
-git push origin v0.11.5
+git tag v0.11.6
+git push origin v0.11.6
 ```
 
 也可在 Actions 页面手动运行工作流：默认只构建验证，勾选发布选项后创建 Release。已有 Release 不会被覆盖。普通代码推送不会自动生成新版本。
 
-当前安装程序版本为 **0.11.5**，内嵌应用运行时版本为 **0.11.0**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
+当前安装程序及应用运行时版本为 **0.11.6**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
+
+0.11.6 修正新电脑麦克风的 `Invalid number of channels`：注册、过滤测试及实时处理按设备支持的声道数和采样率打开，输入转换为单声道处理，输出按实际声道数发送。普通虚拟输出支持“扬声器 (VB-Audio Virtual Cable)”等本地化名称；不再默认选择 `CABLE In 16 Ch` 辅助端点。安装检查与按需麦克风检测也使用相同的普通 VB-CABLE 识别规则。
 
 0.11.5 修正虚拟声卡安装后的错误码 3 处理：等待端点识别最多 60 秒，读取 Windows 设备的重启要求。驱动存在但端点仍不可用时完成文件安装并提示检查，不自动启动处理。诊断记录位于 `%PROGRAMDATA%\AECStudio\driver-install.log`；该状态不代表虚拟麦克风已可用。
 

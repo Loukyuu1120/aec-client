@@ -114,3 +114,13 @@ for (const [playback, expected] of [
  assert.equal(vm.runInNewContext(missingCableExpression,{inventory:{playback}}),expected);
 }
 console.log('Passed: localized virtual output and exclusion of the 16-channel port.');
+
+{
+ const drawSource=source.slice(source.indexOf('function draw('),source.indexOf('let polling='));
+ let allocations=0;
+ const canvas={_width:0,_height:0,get width(){return this._width},set width(value){this._width=value;allocations++},get height(){return this._height},set height(value){this._height=value;allocations++},getBoundingClientRect(){return {width:600,height:90}},getContext(){return {setTransform(){},clearRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillRect(){}}}};
+ const context={$:()=>canvas,window:{devicePixelRatio:1},histories:{wave:Array(90).fill(0)}};
+ vm.runInNewContext(drawSource+"\ndraw('wave',0,'#fff');draw('wave',.01,'#fff');draw('wave',0,'#fff');",context);
+ assert.equal(allocations,2);
+}
+console.log('Passed: waveform canvas buffers are reused across redraws.');

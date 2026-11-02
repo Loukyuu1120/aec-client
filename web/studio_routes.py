@@ -112,7 +112,7 @@ def install(server):
                 'profile': profiles.current(), 'modelAvailable':
                     (BEAM_CHECKPOINT.exists() and CHECKPOINT.exists()) if settings['extractionModel']=='verified' else
                     (BEAM_CHECKPOINT if settings['extractionModel']=='speakerbeam' else CHECKPOINT).exists(),
-                'hardware': model.hardware(), 'activeProcessor': beam.device if beam.model else (model.device if model.model else None),
+                'hardware': model.hardware(gpu_manager.state().get('runtime')), 'activeProcessor': beam.device if beam.model else (model.device if model.model else None),
                 'startup':dict(startup_status, supported=launcher_path(ROOT).is_file(),
                                backgroundAvailable=callable(getattr(app.state,'background_handler',None))),
                 'gpuSetup':gpu_manager.state(), 'microphoneDemand':demand.state(),
@@ -120,7 +120,7 @@ def install(server):
                 'model': {'speakerbeam':'TD-SpeakerBeam · paired 512D cue',
                           'ps4':'PS4 · WeSep BSRNN + WeSpeaker ECAPA-TDNN',
                           'verified':'SpeakerBeam + PS4 target-absence verification'}[settings['extractionModel']],
-                'targetBufferMs': 1500 if settings['extractionModel']=='verified' else 2000, 'version': '0.11.6'}
+                'targetBufferMs': 1500 if settings['extractionModel']=='verified' else 2000, 'version': '0.11.7'}
 
     @app.post('/api/voiceprint/reset-learning')
     def reset_learning():

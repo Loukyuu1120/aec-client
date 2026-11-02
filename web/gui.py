@@ -168,20 +168,11 @@ def _prefs():
 
 
 def _serve():
-    """Server thread: preload the models (the ~5 s
-    part) and scan the soundboard, then serve. Runs
-    before the window opens, so Start and the
-    soundboard tab are instant the moment the GUI
-    appears."""
+    """Start the local server; inference models load on first use."""
     global _server
     from .server import app, chain, board
     from .soundboard import decoders_available
 
-    print("Loading models… (a few seconds)", flush=True)
-    try:
-        chain.preload()
-    except Exception:
-        pass  # /api/start surfaces the error
     try:
         n = len(board.scan())
         print(f"Soundboard: dir={board.display_dir} "

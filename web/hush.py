@@ -130,10 +130,11 @@ def hush_available(lib_path=None, model_path=None, model_dir=None):
     if os.path.isfile(lib) and os.path.isfile(model):
         return True
     try:
-        from .hush_onnx import ort
-    except ImportError:
+        import importlib.util
+        available = importlib.util.find_spec('onnxruntime') is not None
+    except (ImportError, ValueError):
         return False
-    return ort is not None and os.path.isfile(model)
+    return available and os.path.isfile(model)
 
 
 class _HushCt:

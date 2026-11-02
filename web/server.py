@@ -421,16 +421,6 @@ async def ws_meters(ws: WebSocket):
 
 def main():
     import uvicorn
-    # Load the DTLN pairs BEFORE the port opens:
-    # the browser (and the Start button) then see
-    # a fully-loaded server, so Start is instant
-    # on the first process too — without this, a
-    # quick Start click waits out the ~5 s model
-    # load (cold disk cache; a second process is
-    # fast only because the cache is warm).
-    print("Loading models… (a few seconds)",
-          flush=True)
-    chain.preload()
     # Decode the soundboard pads up front so the first tab open
     # shows them, like the desktop's launch-time ScanSounds().
     try:

@@ -7,7 +7,6 @@ import uuid
 from datetime import datetime, timezone
 import numpy as np
 import soundfile as sf
-from scipy.signal import resample_poly
 from math import gcd
 from .model import MODEL_ID
 
@@ -25,6 +24,7 @@ def prepare_audio(audio, rate):
     if not 29.95 <= len(x) / rate <= 60.05:
         raise ValueError('duration_30_60')
     if rate != RATE:
+        from scipy.signal import resample_poly
         common = gcd(int(rate), RATE)
         x = resample_poly(x, RATE // common, int(rate) // common).astype(np.float32)
     x = x[:60 * RATE]

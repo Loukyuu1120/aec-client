@@ -18,10 +18,7 @@ import numpy as np
 from . import dsp
 from .dsp import BLOCK_LEN, BLOCK_SHIFT, BINS, rms
 
-try:
-    from ai_edge_litert.interpreter import Interpreter
-except ImportError:  # pragma: no cover
-    Interpreter = None
+from .dtln import _interpreter_class
 
 Q_CAP = 2048
 RING_CAP = 4096
@@ -67,6 +64,7 @@ class DtlnNs:
             )
 
     def _load(self, prefix, num_threads=None):
+        Interpreter = _interpreter_class()
         if Interpreter is None:
             raise RuntimeError("ai-edge-litert is not installed")
         self.i1 = Interpreter(model_path=prefix + "_1.tflite",

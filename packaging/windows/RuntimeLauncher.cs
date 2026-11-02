@@ -7,7 +7,7 @@ using System.Windows.Forms;
 [assembly: AssemblyTitle("AEC Studio")]
 [assembly: AssemblyProduct("AEC Studio")]
 [assembly: AssemblyDescription("AEC Studio launcher")]
-[assembly: AssemblyVersion("0.11.6.0")]
+[assembly: AssemblyVersion("0.11.7.0")]
 
 internal static class RuntimeLauncher
 {

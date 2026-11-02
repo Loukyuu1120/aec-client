@@ -6,7 +6,6 @@ of fixed delay, instead of registration's zero-phase alignment.
 """
 import math
 import numpy as np
-from scipy.signal import firwin, lfilter
 from .dsp import LinearResampler
 
 
@@ -16,6 +15,8 @@ class CaptureResampler:
         self.resampler = LinearResampler(step)
         self.taps = None
         if self.step > 1.:
+            from scipy.signal import firwin, lfilter
+            self.filter = lfilter
             half = int(math.ceil(10 * self.step))
             self.taps = firwin(2*half+1,1./self.step,window=('kaiser',5.))
             self.state = np.zeros(len(self.taps)-1)
@@ -23,6 +24,6 @@ class CaptureResampler:
     def __call__(self, audio):
         x = np.asarray(audio,np.float32)
         if self.taps is not None and x.size:
-            x, self.state = lfilter(self.taps,[1.],x,zi=self.state)
+            x, self.state = self.filter(self.taps,[1.],x,zi=self.state)
             x = x.astype(np.float32)
         return self.resampler(x)

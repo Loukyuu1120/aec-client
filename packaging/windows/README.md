@@ -1,6 +1,6 @@
 # Windows personal installer
 
-The installer checks the application's lifetime mutex at startup and again before installation. Interactive confirmation sends a local graceful-exit request and waits up to ten seconds for the mutex to disappear. Cancellation, failed exit and silent installation with a running application do not proceed with file replacement. It never terminates arbitrary Python processes. The installer and application runtime are version 0.11.6.
+The installer checks the application's lifetime mutex at startup and again before installation. Interactive confirmation sends a local graceful-exit request and waits up to ten seconds for the mutex to disappear. Cancellation, failed exit and silent installation with a running application do not proceed with file replacement. It never terminates arbitrary Python processes. The installer and application runtime are version 0.11.7.
 
 Build with PowerShell 7 and the system .NET Framework C# compiler. `scripts/build-windows-installer.ps1` accepts explicit download, work, output and Inno Setup compiler directories. Use `-StageOnly` to validate the isolated runtime before compiling the installer.
 

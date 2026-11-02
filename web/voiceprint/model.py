@@ -8,6 +8,7 @@ import hashlib
 import threading
 import time
 import os
+import sys
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -26,13 +27,20 @@ class TargetModel:
         self.processor = 'auto'
         self._hardware = None
 
-    def hardware(self):
+    def hardware(self, runtime=None):
+        if self._hardware is None and runtime and runtime.get('ok'):
+            self._hardware = {'cudaAvailable':bool(runtime.get('cudaAvailable')),
+                              'torchVersion':runtime.get('torch'), 'cudaVersion':runtime.get('cudaVersion'),
+                              'gpuName':runtime.get('gpuName'), 'checked':True}
         if self._hardware is None:
-            import torch
+            torch = sys.modules.get('torch')
+            if torch is None:
+                return {'cudaAvailable':False, 'torchVersion':None, 'cudaVersion':None,
+                        'gpuName':None, 'toolkitVersion':None, 'checked':False}
             available = torch.cuda.is_available()
             self._hardware = {'cudaAvailable': available, 'torchVersion': torch.__version__,
                               'cudaVersion': torch.version.cuda,
-                              'gpuName': torch.cuda.get_device_name(0) if available else None}
+                              'gpuName': torch.cuda.get_device_name(0) if available else None, 'checked':True}
             # The installed toolkit and the runtime bundled with PyTorch are independent.
             locations = [Path(os.environ.get('CUDA_PATH', '.')),
                          Path(os.environ.get('LOCALAPPDATA', '.')) / 'NVIDIA/CUDA/v13.4']
@@ -50,14 +58,19 @@ class TargetModel:
     def configure(self, processor):
         if processor not in ('auto', 'cpu', 'cuda'):
             raise ValueError('invalid_processor')
-        if processor == 'cuda' and not self.hardware()['cudaAvailable']:
-            raise ValueError('cuda_unavailable')
+        if processor == 'cuda':
+            hardware = self.hardware()
+            if hardware.get('checked') is False:
+                from ..runtime_env import probe_runtime
+                hardware = self.hardware(probe_runtime())
+            if not hardware['cudaAvailable']:
+                raise ValueError('cuda_unavailable')
         with self.lock:
             if self.processor != processor:
                 self.model = None
                 self.processor = processor
-                import torch
-                if torch.cuda.is_available():
+                torch = sys.modules.get('torch')
+                if torch is not None and torch.cuda.is_available():
                     torch.cuda.empty_cache()
 
     def load(self):

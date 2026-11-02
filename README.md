@@ -93,16 +93,18 @@ Start.cmd
 
 仓库使用 [Windows Release 工作流](.github/workflows/release.yml)。推送 `v版本号` 标签后，GitHub Actions 在 Windows 上准备依赖、运行测试、构建安装包，并发布 Release，附带安装包及 SHA-256 校验文件。
 
-版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前版本为 `0.11.6`：
+版本号以 `packaging/windows/AECStudio.iss` 的 `AppVersion` 为准，标签必须匹配。例如当前版本为 `0.11.7`：
 
 ```sh
-git tag v0.11.6
-git push origin v0.11.6
+git tag v0.11.7
+git push origin v0.11.7
 ```
 
 也可在 Actions 页面手动运行工作流：默认只构建验证，勾选发布选项后创建 Release。已有 Release 不会被覆盖。普通代码推送不会自动生成新版本。
 
-当前安装程序及应用运行时版本为 **0.11.6**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
+当前安装程序及应用运行时版本为 **0.11.7**。本地构建参数及依赖说明见 [Windows 打包说明](packaging/windows/README.md)。
+
+0.11.7 降低常驻内存：待机和 WebRTC 清晰通话不再加载 PyTorch、ONNX Runtime、LiteRT 或未使用的 DTLN 模型；GPU 环境检查在打开设置时按需通过独立进程执行。波形图复用画布缓冲区。本机隔离服务测试的工作集由约 628 MB 降至约 60 MB，48 kHz 无设备处理链约 61 MB；这不是任务管理器应用分组的总占用，不含 WebView 窗口、音频设备及声纹模型。首次使用对应模型需要加载时间，声纹提取时仍有较高内存开销。
 
 0.11.6 修正新电脑麦克风的 `Invalid number of channels`：注册、过滤测试及实时处理按设备支持的声道数和采样率打开，输入转换为单声道处理，输出按实际声道数发送。普通虚拟输出支持“扬声器 (VB-Audio Virtual Cable)”等本地化名称；不再默认选择 `CABLE In 16 Ch` 辅助端点。安装检查与按需麦克风检测也使用相同的普通 VB-CABLE 识别规则。
 

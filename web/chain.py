@@ -302,6 +302,8 @@ class Chain:
                 "see web/README.md; keeping " + self.ns_backend)
             return False
         with self._load_lock:
+            if name == 'dtln' and self.running and self.ns is None:
+                self._load_engines(aec=False, noise=True)
             if name == "hush":
                 self._ensure_hush()
                 if self.hush is None or not self.hush.ready:
@@ -314,16 +316,18 @@ class Chain:
                     self.hush.reset()
         return True
 
-    def _load_engines(self):
+    def _load_engines(self, aec=True, noise=True):
         """Build the model pairs — the slow part
         (~5 s cold: 4 tflite files + interpreter
         setup). Caller holds _load_lock. NS
         missing/broken is fail-open, not fatal:
         the stage stays off and the engine output
         passes through."""
-        self.dtln = DtlnAec(f"{self.model_dir}/dtln_aec_128",
+        if aec and self.dtln is None:
+            self.dtln = DtlnAec(f"{self.model_dir}/dtln_aec_128",
                               num_threads=self.num_threads)
-        self.ns = DtlnNs(f"{self.model_dir}/dtln_ns_128",
+        if noise and self.ns is None:
+            self.ns = DtlnNs(f"{self.model_dir}/dtln_ns_128",
                          num_threads=self.num_threads)
 
     def preload(self):
@@ -413,13 +417,12 @@ class Chain:
                 # Engine Off: no echo canceller to require — but the NS
                 # stage still loads below (denoise-only mode). A missing
                 # DTLN pair must not fail Start here (nothing needs it).
-                if self.dtln is None:
-                    self._load_engines()
+                self._load_engines(aec=False, noise=self.ns_backend == 'dtln')
             elif engine == "dtln" or backend is None:
                 # DTLN engine path (or no backend selected):
                 # the pair must be ready.
                 if self.dtln is None:
-                    self._load_engines()
+                    self._load_engines(aec=True, noise=self.ns_backend == 'dtln')
                 if not self.dtln.ready:
                     self.last_error = (self.dtln.last_error
                                        or "Failed to load DTLN model")
@@ -433,8 +436,9 @@ class Chain:
                 # (DTLN-NS still loads below — it post-processes
                 # every engine.)
                 backend.reset()
-                if self.dtln is None:
-                    self._load_engines()
+                self._load_engines(aec=False, noise=self.ns_backend == 'dtln')
+            if self.ns_backend == 'dtln' and self.ns is None:
+                self._load_engines(aec=False, noise=True)
             self.running = True
             self.frames = 0
             self._hpf_reset()  # fresh filter memory every Start
@@ -452,8 +456,10 @@ class Chain:
                 self.last_error = (self.hush_error if self.hush is None
                                    else ("" if self.hush.ready
                                          else self.hush.last_error))
-            else:
+            elif ns_backend == 'dtln':
                 self.last_error = "" if self.ns.ready else self.ns.last_error
+            else:
+                self.last_error = ''
             return True
 
     def stop(self):

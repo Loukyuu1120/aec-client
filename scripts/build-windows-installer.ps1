@@ -74,7 +74,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Audio usage monitor compilation failed.' }
 & $compiler /nologo /target:exe /platform:x64 "/out:$stage\AECStudioDriver.exe" (Join-Path $projectRoot 'packaging\windows\DriverHelper.cs')
 if ($LASTEXITCODE -ne 0) { throw 'Driver helper compilation failed.' }
 @'
-AEC Studio 0.11.6 个人试用版
+AEC Studio 0.11.7 个人试用版
 
 包含 Python、CPU 推理环境、Microsoft 运行库及 VB-CABLE 官方已签名虚拟声卡驱动。
 CUDA 改为应用内引导配置：先检测现有可用环境，可用就直接复用；缺少程序组件时才按用户选择添加，不重复安装完整 CUDA Toolkit 或显卡驱动。

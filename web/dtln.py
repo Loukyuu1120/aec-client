@@ -43,10 +43,12 @@ import numpy as np
 from . import dsp
 from .dsp import BLOCK_LEN, BLOCK_SHIFT, BINS
 
-try:
-    from ai_edge_litert.interpreter import Interpreter
-except ImportError:  # pragma: no cover - surfaced as a clean error below
-    Interpreter = None
+def _interpreter_class():
+    try:
+        from ai_edge_litert.interpreter import Interpreter
+        return Interpreter
+    except ImportError:
+        return None
 
 
 def _classify_3(sizes):
@@ -81,6 +83,7 @@ class _TflitePair:
 
     def __init__(self, path_1, path_2, feat_len, n_feats,
                  num_threads=None):
+        Interpreter = _interpreter_class()
         if Interpreter is None:
             raise RuntimeError(
                 "ai-edge-litert is not installed "

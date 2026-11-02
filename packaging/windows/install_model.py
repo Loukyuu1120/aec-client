@@ -22,7 +22,7 @@ def main():
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix('.download')
     try:
-        request = urllib.request.Request(URL, headers={'User-Agent':'AECStudio-Installer/0.11.6'})
+        request = urllib.request.Request(URL, headers={'User-Agent':'AECStudio-Installer/0.11.7'})
         with urllib.request.urlopen(request, timeout=60) as response, temporary.open('wb') as output:
             while True:
                 block = response.read(1024*1024)
